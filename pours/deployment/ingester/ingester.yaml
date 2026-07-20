@@ -41,6 +41,17 @@ extensions:
   signoz_health_check:
     endpoint: 0.0.0.0:13133
 processors:
+  # GDPR / EU PII strip — must run before batch/memory_limiter so it never
+  # leaks client IPs into ClickHouse.
+  redaction/pii:
+    allow_all_keys: false
+    blocked_key_patterns:
+      - ".*client\\.address.*"
+      - ".*client\\.ip.*"
+      - ".*net\\.sock\\.peer\\.addr.*"
+      - ".*http\\.client_ip.*"
+      - ".*http\\.x_forwarded_for.*"
+      - ".*forwarded\\.for.*"
   batch:
     send_batch_max_size: 55000
     send_batch_size: 50000
@@ -84,9 +95,18 @@ receivers:
   otlp:
     protocols:
       grpc:
-        endpoint: 0.0.0.0:4317
+        endpoint: *******:4317
       http:
-        endpoint: 0.0.0.0:4318
+        endpoint: *******:4318
+        cors:
+          allowed_origins:
+            - https://fidget.events
+            - https://staging.fidget.events
+            - https://*.fidget.events
+          allowed_headers:
+            - Content-Type
+            - X-Signoz-Span-Signature
+          max_age: 7200
 service:
   extensions:
   - signoz_health_check
@@ -98,6 +118,7 @@ service:
       - signozmeter
       - metadataexporter
       processors:
+      - redaction/pii
       - batch
       receivers:
       - otlp
@@ -123,6 +144,7 @@ service:
       - signozmeter
       - metadataexporter
       processors:
+      - redaction/pii
       - signozspanmetrics/delta
       - batch
       receivers:
